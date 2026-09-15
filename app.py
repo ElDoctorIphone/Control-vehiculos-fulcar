@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import streamlit as st
-from PIL import Image
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 LOGO_FILE = "fulcar_logo.png"
@@ -12,26 +11,24 @@ st.set_page_config(
     layout="centered",
 )
 
-# --- ESTILOS CSS PERSONALIZADOS (Fusión del logo y diseño limpio) ---
+# --- ESTILOS CSS MÁGICOS (Elimina el fondo blanco automáticamente) ---
 st.markdown(
     """
     <style>
-    /* Estilo general del fondo y tipografía */
     .stApp {
         background-color: #f8f9fa;
     }
     
-    /* FILTRO MÁGICO: Hace que el fondo blanco del logo se vuelva transparente y se adapte al color de la página */
-    .logo-container img {
-        mix-blend-mode: multiply;
+    /* FILTRO DE BLEND: Hace que todo lo blanco de la imagen se vuelva transparente al instante */
+    [data-testid="stImage"] img {
+        mix-blend-mode: multiply !important;
+        background-color: transparent !important;
         display: block;
         margin-left: auto;
         margin-right: auto;
-        width: 260px; /* Tamaño perfecto adaptable */
-        max-width: 100%;
     }
 
-    /* Estilos de títulos y tarjetas */
+    /* Estilo de títulos */
     h1, h3 {
         color: #1a1a1a;
         text-align: center;
@@ -41,30 +38,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- ENCABEZADO CON LOGO INTEGRADO SIN FONDO ---
-try:
-  # Cargamos la imagen para verificar que exista, y la mostramos con HTML estilizado con el filtro CSS
+# --- ENCABEZADO CON LOGO CENTRADO ---
+col1, col2, col3 = st.columns([1, 1.5, 1])
+with col2:
   if os.path.exists(LOGO_FILE):
-    import base64
-
-    with open(LOGO_FILE, "rb") as image_file:
-      encoded_string = base64.b64encode(image_file.read()).decode()
-    st.markdown(
-        f"""
-        <div class="logo-container">
-            <img src="data:image/png;base64,{encoded_string}" alt="Fulcar Logo">
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.image(LOGO_FILE, use_container_width=True)
   else:
-    st.warning(f"⚠️ Archivo '{LOGO_FILE}' no encontrado en la carpeta.")
-except Exception as e:
-  st.title("Fulcar AUTO")
+    st.warning(f"⚠️ Falta el archivo '{LOGO_FILE}'")
 
 st.markdown(
-    "<h3 style='text-align: center; color: #555; margin-bottom: 25px;'"
-    " font-size: 1.2rem;'>Control de Vehículos e Inventario</h3>",
+    "<h3 style='text-align: center; color: #444; margin-top: -10px;"
+    " margin-bottom: 25px; font-size: 1.2rem;'>Control de Vehículos e"
+    " Inventario</h3>",
     unsafe_allow_html=True,
 )
 
