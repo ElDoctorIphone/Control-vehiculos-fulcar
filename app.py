@@ -3,15 +3,13 @@ import pandas as pd
 import streamlit as st
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
-LOGO_FILE = "fulcar_logo.png"
-
 st.set_page_config(
     page_title="Control de Vehículos - Fulcar AUTO",
     page_icon="🚗",
     layout="centered",
 )
 
-# --- ESTILOS CSS MÁGICOS (Elimina el fondo blanco automáticamente) ---
+# --- ESTILOS CSS Y LOGOTIPO CORPORATIVO PROFESIONAL ---
 st.markdown(
     """
     <style>
@@ -19,18 +17,42 @@ st.markdown(
         background-color: #f8f9fa;
     }
     
-    /* FILTRO DE BLEND: Hace que todo lo blanco de la imagen se vuelva transparente al instante */
-    [data-testid="stImage"] img {
-        mix-blend-mode: multiply !important;
-        background-color: transparent !important;
-        display: block;
-        margin-left: auto;
-        margin-right: auto;
+    /* Contenedor elegante del logotipo oficial */
+    .fulcar-logo-container {
+        text-align: center;
+        padding: 15px 0 5px 0;
     }
-
-    /* Estilo de títulos */
-    h1, h3 {
-        color: #1a1a1a;
+    
+    /* Silueta SVG estilizada del vehículo idéntica al logo */
+    .car-silhouette {
+        width: 180px;
+        margin-bottom: -5px;
+    }
+    
+    .logo-main-text {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-size: 2.6rem;
+        font-weight: 900;
+        letter-spacing: 3px;
+        color: #111111;
+        line-height: 1.1;
+        margin: 0;
+        text-transform: uppercase;
+    }
+    
+    .logo-sub-text {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-size: 1.2rem;
+        font-weight: 700;
+        letter-spacing: 8px;
+        color: #222222;
+        margin-top: 2px;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+    }
+    
+    h3 {
+        color: #444444;
         text-align: center;
     }
     </style>
@@ -38,18 +60,25 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- ENCABEZADO CON LOGO CENTRADO ---
-col1, col2, col3 = st.columns([1, 1.5, 1])
-with col2:
-  if os.path.exists(LOGO_FILE):
-    st.image(LOGO_FILE, use_container_width=True)
-  else:
-    st.warning(f"⚠️ Falta el archivo '{LOGO_FILE}'")
+# --- ENCABEZADO CON LOGO VECTORIAL LIMPIO (Cero fondos blancos) ---
+st.markdown(
+    """
+    <div class="fulcar-logo-container">
+        <!-- Silueta elegante del vehículo -->
+        <svg class="car-silhouette" viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 20,95 Q 80,75 140,70 Q 220,65 300,72 Q 380,78 480,92 Q 450,85 410,82 Q 300,75 200,78 Q 100,80 20,95 Z" fill="#111111" />
+            <path d="M 50,90 C 90,82 150,78 220,77 C 320,76 400,82 460,90 C 380,84 250,82 50,90 Z" fill="#111111" />
+        </svg>
+        <div class="logo-main-text">FULCAR</div>
+        <div class="logo-sub-text">AUTO</div>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
 st.markdown(
-    "<h3 style='text-align: center; color: #444; margin-top: -10px;"
-    " margin-bottom: 25px; font-size: 1.2rem;'>Control de Vehículos e"
-    " Inventario</h3>",
+    "<h3 style='text-align: center; color: #555; margin-bottom: 25px;'"
+    " font-size: 1.1rem;'>Control de Vehículos e Inventario</h3>",
     unsafe_allow_html=True,
 )
 
