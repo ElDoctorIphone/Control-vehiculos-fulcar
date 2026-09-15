@@ -1,5 +1,7 @@
 import os
+from datetime import datetime
 import pandas as pd
+import pytz
 import streamlit as st
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -11,24 +13,13 @@ st.set_page_config(
     layout="centered",
 )
 
-# --- ESTILOS CSS PARA HACER TRANSPARENTE EL FONDO BLANCO DE TU LOGO ---
+# --- ESTILOS CSS ---
 st.markdown(
     """
     <style>
     .stApp {
         background-color: #f8f9fa;
     }
-    
-    /* MAGIA CSS: Vuelve transparente el fondo blanco de tu imagen original manteniendo el logo intacto */
-    [data-testid="stImage"] img {
-        background-color: transparent !important;
-        mix-blend-mode: multiply !important;
-        filter: contrast(120%);
-        display: block;
-        margin-left: auto;
-        margin-right: auto;
-    }
-
     h1, h3 {
         color: #1a1a1a;
         text-align: center;
@@ -38,7 +29,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- ENCABEZADO CON TU LOGO ORIGINAL ---
+# --- ENCABEZADO CON LOGO ---
 col1, col2, col3 = st.columns([1, 1.5, 1])
 with col2:
   if os.path.exists(LOGO_FILE):
@@ -54,6 +45,21 @@ st.markdown(
 )
 
 DB_FILE = "clientes_vehiculos.xlsx"
+
+
+def obtener_tiempo_rd():
+  """Obtiene la fecha y hora actual ajustada estrictamente a la zona horaria de Santo Domingo (RD)
+
+  en formato DD/MM/YYYY hh:mm a.m./p.m.
+  """
+  try:
+    tz_rd = pytz.timezone("America/Santo_Domingo")
+    ahora_rd = datetime.now(tz_rd)
+    # Formato dominicano: Día/Mes/Año Hora:Minuto AM/PM
+    return ahora_rd.strftime("%d/%m/%Y %I:%M %p").lower().replace("am", "a. m.").replace("pm", "p. m.")
+  except Exception:
+    # Respaldo por si falla la librería de zonas horarias
+    return datetime.now().strftime("%d/%m/%Y %I:%M %p").lower().replace("am", "a. m.").replace("pm", "p. m.")
 
 
 def cargar_datos():
@@ -177,10 +183,13 @@ with st.form("form_registro", clear_on_submit=True):
 
       nuevo_id = str(max_id + 1)
 
+      # Fecha y hora actual ajustada a la hora dominicana en formato DD/MM/YYYY
+      fecha_hora_rd = obtener_tiempo_rd()
+
       nuevo_registro = pd.DataFrame(
           [{
               "ID": nuevo_id,
-              "Fecha/Hora": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
+              "Fecha/Hora": fecha_hora_rd,
               "Registrado Por": registrado_por,
               "Cliente": nombre_cliente,
               "Teléfono": telefono,
