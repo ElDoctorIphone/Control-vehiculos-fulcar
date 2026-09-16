@@ -40,12 +40,12 @@ with col2:
 st.markdown(
     "<h3 style='text-align: center; color: #444; margin-top: -10px;"
     " margin-bottom: 25px; font-size: 1.2rem;'>Control de Vehículos e"
-    " Inventario (Nube Permanente)</h3>",
+    " Inventario (Supabase Cloud)</h3>",
     unsafe_allow_html=True,
 )
 
-# Archivo de base de datos persistente en disco del servidor
-DB_FILE = "clientes_vehiculos.xlsx"
+# --- CONEXIÓN SQL PERMANENTE CON SUPABASE ---
+conn = st.connection("sql", type="sql")
 
 
 def obtener_tiempo_rd():
@@ -73,45 +73,105 @@ def obtener_tiempo_rd():
 
 
 def cargar_datos():
-  if os.path.exists(DB_FILE):
-    try:
-      df = pd.read_excel(DB_FILE)
-      if not df.empty:
-        return df
-    except Exception:
-      pass
+  try:
+    df = conn.query("SELECT * FROM clientes_vehiculos;", ttl=0)
+    if df is not None and not df.empty:
+      return df
+  except Exception as e:
+    st.info(
+        "ℹ️ Conectando con la base de datos en la nube (tabla inicial"
+        " vacía)..."
+    )
 
   return pd.DataFrame(
       columns=[
-          "ID",
-          "Fecha/Hora",
-          "Registrado Por",
-          "Cliente",
-          "Teléfono",
-          "Vehículo",
-          "Nota",
+          "id",
+          "fecha_hora",
+          "registrado_por",
+          "cliente",
+          "telefono",
+          "vehiculo",
+          "nota",
       ]
   )
 
 
-def guardar_datos(df):
-  df.to_excel(DB_FILE, index=False)
+def guardar_registro_en_db(
+    nuevo_id, fecha_hora, reg_por, cliente, tel, vehiculo, nota
+):
+  with conn.session as s:
+    s.execute(
+        "INSERT INTO clientes_vehiculos (id, fecha_hora, registrado_por,"
+        " cliente, telefono, vehiculo, nota) VALUES (:id, :fh, :rp, :cl, :tel,"
+        " :veh, :nota)",
+        {
+            "id": str(nuevo_id),
+            "fh": fecha_hora,
+            "rp": reg_por,
+            "cl": cliente,
+            "tel": tel,
+            "veh": vehiculo,
+            "nota": nota,
+        },
+    )
+    s.commit()
 
 
-# Cargar datos actuales
+def actualizar_db_completa(df):
+  with conn.session as s:
+    s.execute("DELETE FROM clientes_vehiculos;")
+    for _, row in df.iterrows():
+      s.execute(
+          "INSERT INTO clientes_vehiculos (id, fecha_hora, registrado_por,"
+          " cliente, telefono, vehiculo, nota) VALUES (:id, :fh, :rp, :cl, :tel,"
+          " :veh, :nota)",
+          {
+              "id": str(row["id"]),
+              "fh": row["fecha_hora"],
+              "rp": row["registrado_por"],
+              "cl": row["cliente"],
+              "tel": row["telefono"],
+              "veh": row["vehiculo"],
+              "nota": row["nota"],
+          },
+      )
+    s.commit()
+
+
+# Cargar datos actuales desde Supabase
 df_registros = cargar_datos()
 
-# Asegurar columna ID única
-if not df_registros.empty and "ID" not in df_registros.columns:
-  df_registros.insert(0, "ID", [str(i) for i in range(1, len(df_registros) + 1)])
-elif not df_registros.empty:
-  df_registros["ID"] = df_registros["ID"].astype(str)
-
+# Mapeo visual de columnas amigables
+df_mostrar = (
+    df_registros.rename(
+        columns={
+            "id": "ID",
+            "fecha_hora": "Fecha/Hora",
+            "registrado_por": "Registrado Por",
+            "cliente": "Cliente",
+            "telefono": "Teléfono",
+            "vehiculo": "Vehículo",
+            "nota": "Nota",
+        }
+    )
+    if not df_registros.empty
+    else pd.DataFrame(
+        columns=[
+            "ID",
+            "Fecha/Hora",
+            "Registrado Por",
+            "Cliente",
+            "Teléfono",
+            "Vehículo",
+            "Nota",
+        ]
+    )
+)
 
 # --- INTERFAZ SUPERIOR (Desplegable de Vehículos) ---
 with st.expander("🚙 Ver Vehículos Registrados en el Sistema"):
-  if not df_registros.empty and "Vehículo" in df_registros.columns:
-    vehiculos_unicos = df_registros["Vehículo"].dropna().unique()
+  if not df_mostrar.empty and "Vehículo" in df_mostrar.columns:
+    vehiculos_unicos = df_mostrar["Vehículo"].dropna().unique()
     if len(vehiculos_unicos) > 0:
       st.write("Lista de vehículos en inventario:")
       for v in vehiculos_unicos:
@@ -119,7 +179,7 @@ with st.expander("🚙 Ver Vehículos Registrados en el Sistema"):
     else:
       st.info("No hay vehículos registrados todavía.")
   else:
-    st.info("Base de datos vacía.")
+    st.info("Base de datos en la nube vacía.")
 
 st.markdown("")
 
@@ -136,8 +196,8 @@ with st.form("form_registro", clear_on_submit=True):
   )
 
   vehiculos_existentes = (
-      list(df_registros["Vehículo"].dropna().unique())
-      if not df_registros.empty and "Vehículo" in df_registros.columns
+      list(df_mostrar["Vehículo"].dropna().unique())
+      if not df_mostrar.empty and "Vehículo" in df_mostrar.columns
       else []
   )
 
@@ -165,7 +225,9 @@ with st.form("form_registro", clear_on_submit=True):
       placeholder="Detalles de entrada, estado del vehículo, motivo...",
   )
 
-  submitted = st.form_submit_button("💾 Guardar Registro", use_container_width=True)
+  submitted = st.form_submit_button(
+      "💾 Guardar en la Nube", use_container_width=True
+  )
 
   if submitted:
     if not nombre_cliente or not telefono or not vehiculo or not registrado_por:
@@ -175,9 +237,9 @@ with st.form("form_registro", clear_on_submit=True):
       )
     else:
       max_id = 0
-      if not df_registros.empty and "ID" in df_registros.columns:
+      if not df_registros.empty and "id" in df_registros.columns:
         try:
-          max_id = pd.to_numeric(df_registros["ID"], errors="coerce").max()
+          max_id = pd.to_numeric(df_registros["id"], errors="coerce").max()
           if pd.isna(max_id):
             max_id = len(df_registros)
         except:
@@ -186,41 +248,38 @@ with st.form("form_registro", clear_on_submit=True):
       nuevo_id = str(int(max_id) + 1)
       fecha_hora_rd = obtener_tiempo_rd()
 
-      nuevo_registro = pd.DataFrame(
-          [{
-              "ID": nuevo_id,
-              "Fecha/Hora": fecha_hora_rd,
-              "Registrado Por": registrado_por,
-              "Cliente": nombre_cliente,
-              "Teléfono": telefono,
-              "Vehículo": vehiculo,
-              "Nota": nota,
-          }]
+      # Guardar directamente en la base de datos de Supabase
+      guardar_registro_en_db(
+          nuevo_id,
+          fecha_hora_rd,
+          registrado_por,
+          nombre_cliente,
+          telefono,
+          vehiculo,
+          nota,
       )
-      df_registros = pd.concat(
-          [df_registros, nuevo_registro], ignore_index=True
+      st.success(
+          f"✅ ¡Vehículo para {nombre_cliente} guardado en la nube con éxito!"
       )
-      guardar_datos(df_registros)
-      st.success(f"✅ ¡Vehículo para {nombre_cliente} guardado con éxito!")
       st.rerun()
 
 st.markdown("---")
 
 # --- VISTA GENERAL DE REGISTROS ---
-st.markdown("### 📊 Base de Datos de Registros")
+st.markdown("### 📊 Base de Datos de Registros (En Vivo)")
 
-if not df_registros.empty:
+if not df_mostrar.empty:
   busqueda = st.text_input(
       "🔍 Buscar cliente, teléfono o vehículo:", placeholder="Escribe para filtrar..."
   )
   if busqueda:
-    df_filtrado = df_registros[
-        df_registros.astype(str)
+    df_filtrado = df_mostrar[
+        df_mostrar.astype(str)
         .apply(lambda x: x.str.contains(busqueda, case=False, na=False))
         .any(axis=1)
     ]
   else:
-    df_filtrado = df_registros
+    df_filtrado = df_mostrar
 
   st.dataframe(
       df_filtrado.drop(columns=["ID"])
@@ -230,18 +289,16 @@ if not df_registros.empty:
       hide_index=True,
   )
 
-  with open(DB_FILE, "rb") as f:
-    st.download_button(
-        label="📥 Descargar Base de Datos en Excel (.xlsx)",
-        data=f,
-        file_name="base_datos_fulcar.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-        use_container_width=True,
-    )
+  csv_data = df_mostrar.to_csv(index=False).encode("utf-8")
+  st.download_button(
+      label="📥 Descargar Respaldo en CSV",
+      data=csv_data,
+      file_name="respaldo_fulcar.csv",
+      mime="text/csv",
+      use_container_width=True,
+  )
 else:
-  st.info("ℹ️ Aún no hay registros en la base de datos.")
+  st.info("ℹ️ La base de datos en la nube está conectada y lista.")
 
 # --- PANEL DE ADMINISTRADOR ---
 st.markdown("---")
@@ -253,33 +310,44 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
   if password_admin == "Fulcar0131":
     st.success("✅ Acceso concedido.")
 
-    if not df_registros.empty:
+    if not df_mostrar.empty:
       st.warning(
           "⚠️ **INTERFAZ DE EDICIÓN REAL:** Haz doble clic en cualquier celda"
           " de la tabla de abajo para corregir datos directamente."
       )
 
       df_editado = st.data_editor(
-          df_registros,
+          df_mostrar,
           num_rows="dynamic",
           use_container_width=True,
           key="editor",
           column_config={"ID": st.column_config.Column(disabled=True)},
       )
 
-      if st.button("💾 Guardar Cambios y Actualizar Base de Datos"):
+      if st.button("💾 Guardar Cambios en la Nube"):
         if df_editado["ID"].duplicated().any():
           st.error(
               "Error: Hay IDs duplicados. Por favor, corrige los IDs antes de"
               " guardar."
           )
         else:
-          guardar_datos(df_editado)
-          st.success("🎉 ¡Base de datos actualizada con éxito!")
+          df_para_db = df_editado.rename(
+              columns={
+                  "ID": "id",
+                  "Fecha/Hora": "fecha_hora",
+                  "Registrado Por": "registrado_por",
+                  "Cliente": "cliente",
+                  "Teléfono": "telefono",
+                  "Vehículo": "vehiculo",
+                  "Nota": "nota",
+              }
+          )
+          actualizar_db_completa(df_para_db)
+          st.success("🎉 ¡Supabase actualizado con éxito!")
           st.rerun()
 
       st.markdown("### 🗑️ Eliminar un registro específico")
-      ids_disponibles = list(df_registros["ID"].astype(str))
+      ids_disponibles = list(df_mostrar["ID"].astype(str))
       id_a_borrar = st.selectbox(
           "Selecciona el ID del registro a eliminar permanentemente",
           options=ids_disponibles,
@@ -288,19 +356,11 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
       if st.button(
           "❌ Eliminar Registro Seleccionado (IRREVERSIBLE)", type="primary"
       ):
-        df_registros = df_registros[
-            df_registros["ID"].astype(str) != str(id_a_borrar)
+        df_filtrado_borrado = df_registros[
+            df_registros["id"].astype(str) != str(id_a_borrar)
         ]
-        if not df_registros.empty:
-          df_registros.reset_index(drop=True, inplace=True)
-          df_registros.insert(
-              0,
-              "ID",
-              [str(i) for i in range(1, len(df_registros) + 1)],
-          )
-
-        guardar_datos(df_registros)
-        st.success("🗑️ Registro eliminado correctamente.")
+        actualizar_db_completa(df_filtrado_borrado)
+        st.success("🗑️ Registro eliminado de la nube correctamente.")
         st.rerun()
     else:
       st.info("ℹ️ No hay datos para administrar.")
