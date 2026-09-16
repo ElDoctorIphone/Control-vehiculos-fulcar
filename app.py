@@ -2,6 +2,8 @@ from datetime import datetime
 import os
 import pandas as pd
 import pytz
+import sqlalchemy
+from sqlalchemy import text
 import streamlit as st
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -101,9 +103,11 @@ def guardar_registro_en_db(
 ):
   with conn.session as s:
     s.execute(
-        "INSERT INTO clientes_vehiculos (id, fecha_hora, registrado_por,"
-        " cliente, telefono, vehiculo, nota) VALUES (:id, :fh, :rp, :cl, :tel,"
-        " :veh, :nota)",
+        text(
+            "INSERT INTO clientes_vehiculos (id, fecha_hora, registrado_por,"
+            " cliente, telefono, vehiculo, nota) VALUES (:id, :fh, :rp, :cl,"
+            " :tel, :veh, :nota)"
+        ),
         {
             "id": str(nuevo_id),
             "fh": fecha_hora,
@@ -119,12 +123,14 @@ def guardar_registro_en_db(
 
 def actualizar_db_completa(df):
   with conn.session as s:
-    s.execute("DELETE FROM clientes_vehiculos;")
+    s.execute(text("DELETE FROM clientes_vehiculos;"))
     for _, row in df.iterrows():
       s.execute(
-          "INSERT INTO clientes_vehiculos (id, fecha_hora, registrado_por,"
-          " cliente, telefono, vehiculo, nota) VALUES (:id, :fh, :rp, :cl, :tel,"
-          " :veh, :nota)",
+          text(
+              "INSERT INTO clientes_vehiculos (id, fecha_hora, registrado_por,"
+              " cliente, telefono, vehiculo, nota) VALUES (:id, :fh, :rp, :cl,"
+              " :tel, :veh, :nota)"
+          ),
           {
               "id": str(row["id"]),
               "fh": row["fecha_hora"],
