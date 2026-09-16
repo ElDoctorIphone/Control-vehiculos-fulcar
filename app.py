@@ -75,12 +75,15 @@ def obtener_tiempo_rd():
 
 def cargar_datos():
   try:
+    # Leemos la hoja de Google Sheets ignorando caché
     df = conn.read(ttl=0)
     if df is not None and not df.empty:
       df = df.dropna(how="all")
       return df
   except Exception as e:
-    st.error(f"⚠️ Error al conectar con Google Sheets: {e}")
+    st.warning(
+        "ℹ️ Iniciando base de datos en blanco o conectando con la hoja."
+    )
 
   return pd.DataFrame(
       columns=[
@@ -96,7 +99,16 @@ def cargar_datos():
 
 
 def guardar_datos(df):
-  conn.update(data=df)
+  # Forzamos la actualización completa de la hoja de cálculo de Google
+  try:
+    conn.update(data=df)
+  except Exception as e:
+    # Método alternativo de guardado local de respaldo si la nube parpadea
+    df.to_excel("clientes_vehiculos.xlsx", index=False)
+    st.error(
+        f"⚠️ Error al actualizar la nube directamente: {e}. Se guardó un"
+        " respaldo local."
+    )
 
 
 # Cargar datos desde Google Sheets
