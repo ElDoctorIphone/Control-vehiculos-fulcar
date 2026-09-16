@@ -3,3 +3,4 @@ pandas
 openpyxl
 Pillow
 pytz
+st-gsheets-connection
