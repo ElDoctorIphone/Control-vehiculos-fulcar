@@ -1,7 +1,8 @@
-import os
 from datetime import datetime
+import os
 import pandas as pd
 import pytz
+from streamlit_gsheets import GSheetsConnection
 import streamlit as st
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -40,34 +41,47 @@ with col2:
 st.markdown(
     "<h3 style='text-align: center; color: #444; margin-top: -10px;"
     " margin-bottom: 25px; font-size: 1.2rem;'>Control de Vehículos e"
-    " Inventario</h3>",
+    " Inventario (Nube Permanente)</h3>",
     unsafe_allow_html=True,
 )
 
-DB_FILE = "clientes_vehiculos.xlsx"
+# --- CONEXIÓN A GOOGLE SHEETS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 
 def obtener_tiempo_rd():
-  """Obtiene la fecha y hora actual ajustada estrictamente a la zona horaria de Santo Domingo (RD)
+  """Obtiene la fecha y hora actual en zona horaria de Santo Domingo (RD)
 
   en formato DD/MM/YYYY hh:mm a.m./p.m.
   """
   try:
     tz_rd = pytz.timezone("America/Santo_Domingo")
     ahora_rd = datetime.now(tz_rd)
-    # Formato dominicano: Día/Mes/Año Hora:Minuto AM/PM
-    return ahora_rd.strftime("%d/%m/%Y %I:%M %p").lower().replace("am", "a. m.").replace("pm", "p. m.")
+    return (
+        ahora_rd.strftime("%d/%m/%Y %I:%M %p")
+        .lower()
+        .replace("am", "a. m.")
+        .replace("pm", "p. m.")
+    )
   except Exception:
-    # Respaldo por si falla la librería de zonas horarias
-    return datetime.now().strftime("%d/%m/%Y %I:%M %p").lower().replace("am", "a. m.").replace("pm", "p. m.")
+    return (
+        datetime.now()
+        .strftime("%d/%m/%Y %I:%M %p")
+        .lower()
+        .replace("am", "a. m.")
+        .replace("pm", "p. m.")
+    )
 
 
 def cargar_datos():
-  if os.path.exists(DB_FILE):
-    try:
-      return pd.read_excel(DB_FILE)
-    except Exception:
-      pass
+  try:
+    df = conn.read(ttl=0)
+    if df is not None and not df.empty:
+      df = df.dropna(how="all")
+      return df
+  except Exception as e:
+    st.error(f"⚠️ Error al conectar con Google Sheets: {e}")
+
   return pd.DataFrame(
       columns=[
           "ID",
@@ -82,28 +96,17 @@ def cargar_datos():
 
 
 def guardar_datos(df):
-  df.to_excel(DB_FILE, index=False)
+  conn.update(data=df)
 
 
+# Cargar datos desde Google Sheets
 df_registros = cargar_datos()
 
-# Asegurar columna ID única para edición
+# Asegurar columna ID única
 if not df_registros.empty and "ID" not in df_registros.columns:
   df_registros.insert(0, "ID", [str(i) for i in range(1, len(df_registros) + 1)])
 elif not df_registros.empty:
   df_registros["ID"] = df_registros["ID"].astype(str)
-elif df_registros.empty:
-  df_registros = pd.DataFrame(
-      columns=[
-          "ID",
-          "Fecha/Hora",
-          "Registrado Por",
-          "Cliente",
-          "Teléfono",
-          "Vehículo",
-          "Nota",
-      ]
-  )
 
 
 # --- INTERFAZ SUPERIOR (Desplegable de Vehículos) ---
@@ -115,9 +118,9 @@ with st.expander("🚙 Ver Vehículos Registrados en el Sistema"):
       for v in vehiculos_unicos:
         st.markdown(f"- 🚗 **{v}**")
     else:
-      st.info("No hay vehículos registrados.")
+      st.info("No hay vehículos registrados todavía.")
   else:
-    st.info("Base de datos vacía.")
+    st.info("Base de datos en la nube vacía.")
 
 st.markdown("")
 
@@ -164,7 +167,7 @@ with st.form("form_registro", clear_on_submit=True):
   )
 
   submitted = st.form_submit_button(
-      "💾 Guardar Registro", use_container_width=True
+      "💾 Guardar en la Nube", use_container_width=True
   )
 
   if submitted:
@@ -177,13 +180,13 @@ with st.form("form_registro", clear_on_submit=True):
       max_id = 0
       if not df_registros.empty and "ID" in df_registros.columns:
         try:
-          max_id = df_registros["ID"].astype(int).max()
+          max_id = pd.to_numeric(df_registros["ID"], errors="coerce").max()
+          if pd.isna(max_id):
+            max_id = len(df_registros)
         except:
           max_id = len(df_registros)
 
-      nuevo_id = str(max_id + 1)
-
-      # Fecha y hora actual ajustada a la hora dominicana en formato DD/MM/YYYY
+      nuevo_id = str(int(max_id) + 1)
       fecha_hora_rd = obtener_tiempo_rd()
 
       nuevo_registro = pd.DataFrame(
@@ -201,13 +204,15 @@ with st.form("form_registro", clear_on_submit=True):
           [df_registros, nuevo_registro], ignore_index=True
       )
       guardar_datos(df_registros)
-      st.success(f"✅ ¡Vehículo para {nombre_cliente} guardado correctamente!")
+      st.success(
+          f"✅ ¡Vehículo para {nombre_cliente} guardado en la nube con éxito!"
+      )
       st.rerun()
 
 st.markdown("---")
 
 # --- VISTA GENERAL DE REGISTROS ---
-st.markdown("### 📊 Base de Datos de Registros")
+st.markdown("### 📊 Base de Datos de Registros (En Vivo)")
 
 if not df_registros.empty:
   busqueda = st.text_input(
@@ -230,18 +235,16 @@ if not df_registros.empty:
       hide_index=True,
   )
 
-  with open(DB_FILE, "rb") as f:
-    st.download_button(
-        label="📥 Descargar Base de Datos en Excel (.xlsx)",
-        data=f,
-        file_name="base_datos_fulcar.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-        use_container_width=True,
-    )
+  csv_data = df_registros.to_csv(index=False).encode("utf-8")
+  st.download_button(
+      label="📥 Descargar Respaldo en CSV",
+      data=csv_data,
+      file_name="respaldo_fulcar.csv",
+      mime="text/csv",
+      use_container_width=True,
+  )
 else:
-  st.info("ℹ️ Aún no hay registros en la base de datos.")
+  st.info("ℹ️ La base de datos en la nube está conectada y lista.")
 
 # --- PANEL DE ADMINISTRADOR ---
 st.markdown("---")
@@ -267,7 +270,7 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
           column_config={"ID": st.column_config.Column(disabled=True)},
       )
 
-      if st.button("💾 Guardar Cambios y Actualizar Base de Datos"):
+      if st.button("💾 Guardar Cambios en la Nube"):
         if df_editado["ID"].duplicated().any():
           st.error(
               "Error: Hay IDs duplicados. Por favor, corrige los IDs antes de"
@@ -275,7 +278,7 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
           )
         else:
           guardar_datos(df_editado)
-          st.success("🎉 ¡Base de datos actualizada con éxito!")
+          st.success("🎉 ¡Google Sheets actualizado con éxito!")
           st.rerun()
 
       st.markdown("### 🗑️ Eliminar un registro específico")
@@ -300,7 +303,7 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
           )
 
         guardar_datos(df_registros)
-        st.success("🗑️ Registro eliminado correctamente.")
+        st.success("🗑️ Registro eliminado de la nube correctamente.")
         st.rerun()
     else:
       st.info("ℹ️ No hay datos para administrar.")
