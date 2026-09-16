@@ -2,7 +2,6 @@ from datetime import datetime
 import os
 import pandas as pd
 import pytz
-from streamlit_gsheets import GSheetsConnection
 import streamlit as st
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -45,8 +44,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- CONEXIÓN A GOOGLE SHEETS ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Archivo de base de datos persistente en disco del servidor
+DB_FILE = "clientes_vehiculos.xlsx"
 
 
 def obtener_tiempo_rd():
@@ -74,16 +73,13 @@ def obtener_tiempo_rd():
 
 
 def cargar_datos():
-  try:
-    # Leemos la hoja de Google Sheets ignorando caché
-    df = conn.read(ttl=0)
-    if df is not None and not df.empty:
-      df = df.dropna(how="all")
-      return df
-  except Exception as e:
-    st.warning(
-        "ℹ️ Iniciando base de datos en blanco o conectando con la hoja."
-    )
+  if os.path.exists(DB_FILE):
+    try:
+      df = pd.read_excel(DB_FILE)
+      if not df.empty:
+        return df
+    except Exception:
+      pass
 
   return pd.DataFrame(
       columns=[
@@ -99,19 +95,10 @@ def cargar_datos():
 
 
 def guardar_datos(df):
-  # Forzamos la actualización completa de la hoja de cálculo de Google
-  try:
-    conn.update(data=df)
-  except Exception as e:
-    # Método alternativo de guardado local de respaldo si la nube parpadea
-    df.to_excel("clientes_vehiculos.xlsx", index=False)
-    st.error(
-        f"⚠️ Error al actualizar la nube directamente: {e}. Se guardó un"
-        " respaldo local."
-    )
+  df.to_excel(DB_FILE, index=False)
 
 
-# Cargar datos desde Google Sheets
+# Cargar datos actuales
 df_registros = cargar_datos()
 
 # Asegurar columna ID única
@@ -132,7 +119,7 @@ with st.expander("🚙 Ver Vehículos Registrados en el Sistema"):
     else:
       st.info("No hay vehículos registrados todavía.")
   else:
-    st.info("Base de datos en la nube vacía.")
+    st.info("Base de datos vacía.")
 
 st.markdown("")
 
@@ -178,9 +165,7 @@ with st.form("form_registro", clear_on_submit=True):
       placeholder="Detalles de entrada, estado del vehículo, motivo...",
   )
 
-  submitted = st.form_submit_button(
-      "💾 Guardar en la Nube", use_container_width=True
-  )
+  submitted = st.form_submit_button("💾 Guardar Registro", use_container_width=True)
 
   if submitted:
     if not nombre_cliente or not telefono or not vehiculo or not registrado_por:
@@ -216,15 +201,13 @@ with st.form("form_registro", clear_on_submit=True):
           [df_registros, nuevo_registro], ignore_index=True
       )
       guardar_datos(df_registros)
-      st.success(
-          f"✅ ¡Vehículo para {nombre_cliente} guardado en la nube con éxito!"
-      )
+      st.success(f"✅ ¡Vehículo para {nombre_cliente} guardado con éxito!")
       st.rerun()
 
 st.markdown("---")
 
 # --- VISTA GENERAL DE REGISTROS ---
-st.markdown("### 📊 Base de Datos de Registros (En Vivo)")
+st.markdown("### 📊 Base de Datos de Registros")
 
 if not df_registros.empty:
   busqueda = st.text_input(
@@ -247,16 +230,18 @@ if not df_registros.empty:
       hide_index=True,
   )
 
-  csv_data = df_registros.to_csv(index=False).encode("utf-8")
-  st.download_button(
-      label="📥 Descargar Respaldo en CSV",
-      data=csv_data,
-      file_name="respaldo_fulcar.csv",
-      mime="text/csv",
-      use_container_width=True,
-  )
+  with open(DB_FILE, "rb") as f:
+    st.download_button(
+        label="📥 Descargar Base de Datos en Excel (.xlsx)",
+        data=f,
+        file_name="base_datos_fulcar.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        use_container_width=True,
+    )
 else:
-  st.info("ℹ️ La base de datos en la nube está conectada y lista.")
+  st.info("ℹ️ Aún no hay registros en la base de datos.")
 
 # --- PANEL DE ADMINISTRADOR ---
 st.markdown("---")
@@ -282,7 +267,7 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
           column_config={"ID": st.column_config.Column(disabled=True)},
       )
 
-      if st.button("💾 Guardar Cambios en la Nube"):
+      if st.button("💾 Guardar Cambios y Actualizar Base de Datos"):
         if df_editado["ID"].duplicated().any():
           st.error(
               "Error: Hay IDs duplicados. Por favor, corrige los IDs antes de"
@@ -290,7 +275,7 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
           )
         else:
           guardar_datos(df_editado)
-          st.success("🎉 ¡Google Sheets actualizado con éxito!")
+          st.success("🎉 ¡Base de datos actualizada con éxito!")
           st.rerun()
 
       st.markdown("### 🗑️ Eliminar un registro específico")
@@ -315,7 +300,7 @@ with st.expander("🔐 Panel de Administrador (Edición / Corrección de Datos)"
           )
 
         guardar_datos(df_registros)
-        st.success("🗑️ Registro eliminado de la nube correctamente.")
+        st.success("🗑️ Registro eliminado correctamente.")
         st.rerun()
     else:
       st.info("ℹ️ No hay datos para administrar.")
